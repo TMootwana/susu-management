@@ -83,6 +83,8 @@ Group::Group(Cents weeklyContribution, const std::string& currency,
       minToStart_(minToStart) {
     if (weeklyContribution <= 0)
         throw std::invalid_argument("The weekly contribution must be greater than zero.");
+    week_ = 1;
+    cycle_ = 1;
 }
 
 int Group::indexOf(const std::string& id) const {
@@ -105,10 +107,56 @@ Result Group::addMember(const std::string& rawId) {
 
     Member m;
     m.id = id;
+    m.paid = 0;
     members_.push_back(m);
     return make(OK, "Added " + id + ".");
 }
 
+Cents Group::owedBy(const std::string& id) const {
+    int i = indexOf(id);
+    if (i < 0) return -1;
+    return contribution_ - members_[i].paid;
+}
+
+std::vector<Debt> Group::debts() const {
+    std::vector<Debt> result;
+    for (std::size_t i = 0; i < members_.size(); ++i) {
+        Cents owed = contribution_ - members_[i].paid;
+        if (owed > 0) {
+            Debt d;
+            d.memberId = members_[i].id;
+            d.owed = owed;
+            result.push_back(d);
+        }
+    }
+    return result;
+}
+
+Result Group::recordContribution(const std::string& id, int week, Cents amount) {
+    if (members_.size() < minToStart_)
+        return make(NOT_ENOUGH_MEMBERS, "The group needs at least " +
+                    std::to_string(minToStart_) + " members before payments start.");
+    int i = indexOf(id);
+    if (i < 0)
+        return make(UNKNOWN_MEMBER, "Unknown member: " + trim(id) + ".");
+    if (week != week_)
+        return make(WRONG_WEEK, "Payments are accepted for the current week only (week " +
+                    std::to_string(week_) + ").");
+    if (amount <= 0)
+        return make(INVALID_AMOUNT, "The amount must be greater than zero.");
+
+    Member& m = members_[i];
+    Cents owed = contribution_ - m.paid;
+    if (owed == 0)
+        return make(OVERPAYMENT, m.id + " has already paid in full this week.");
+    if (amount > owed)
+        return make(OVERPAYMENT, "That is more than " + m.id + " owes (" +
+                    formatMoney(owed, currency_) + ").");
+
+    m.paid += amount;
+    return make(OK, "Recorded " + formatMoney(amount, currency_) + " for " + m.id +
+                ". Still owes " + formatMoney(contribution_ - m.paid, currency_) + ".");
+}
 
 
 

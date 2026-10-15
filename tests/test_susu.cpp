@@ -156,6 +156,55 @@ TEST(group_is_limited_to_its_maximum_size) {
     CHECK_EQ(g.members().size(), 3u);
 }
 
+// ------------------------------------------------------------ contribution tests
+
+TEST(unknown_member_is_rejected) {
+    Group g = makeGroup(3);
+    CHECK_EQ(g.recordContribution("NOBODY", 1, 5000).status, UNKNOWN_MEMBER);
+    CHECK_EQ(g.debts().size(), 3u);  // nothing changed
+}
+
+TEST(zero_and_negative_amounts_are_rejected) {
+    Group g = makeGroup(3);
+    CHECK_EQ(g.recordContribution("M1", 1, 0).status, INVALID_AMOUNT);
+    CHECK_EQ(g.recordContribution("M1", 1, -1).status, INVALID_AMOUNT);
+    CHECK_EQ(g.recordContribution("M1", 1, -10000).status, INVALID_AMOUNT);
+    CHECK_EQ(g.owedBy("M1"), R100);
+}
+
+TEST(payment_above_the_amount_owed_is_rejected) {
+    Group g = makeGroup(3);
+    CHECK_EQ(g.recordContribution("M1", 1, 10001).status, OVERPAYMENT);
+    CHECK_EQ(g.owedBy("M1"), R100);
+    CHECK_EQ(g.recordContribution("M1", 1, 6000).status, OK);
+    CHECK_EQ(g.recordContribution("M1", 1, 4001).status, OVERPAYMENT);  // only 4000 left
+    CHECK_EQ(g.owedBy("M1"), 4000);
+}
+
+TEST(partial_payments_are_accepted_and_the_balance_is_tracked) {
+    Group g = makeGroup(3);
+    CHECK_EQ(g.recordContribution("M1", 1, 3000).status, OK);
+    CHECK_EQ(g.owedBy("M1"), 7000);
+    CHECK_EQ(g.recordContribution("M1", 1, 2500).status, OK);
+    CHECK_EQ(g.owedBy("M1"), 4500);
+    CHECK_EQ(g.recordContribution("M1", 1, 4500).status, OK);
+    CHECK_EQ(g.owedBy("M1"), 0);
+    CHECK_EQ(g.recordContribution("M1", 1, 1).status, OVERPAYMENT);  // already paid in full
+    CHECK_EQ(g.debts().size(), 2u);  // only M2 and M3 still owe
+}
+
+TEST(payment_for_the_wrong_week_is_rejected) {
+    Group g = makeGroup(3);
+    CHECK_EQ(g.recordContribution("M1", 2, 5000).status, WRONG_WEEK);
+    CHECK_EQ(g.recordContribution("M1", 0, 5000).status, WRONG_WEEK);
+    CHECK_EQ(g.owedBy("M1"), R100);
+}
+
+TEST(payments_need_enough_members) {
+    Group g(R100);
+    g.addMember("ONLY");
+    CHECK_EQ(g.recordContribution("ONLY", 1, 5000).status, NOT_ENOUGH_MEMBERS);
+}
 
 
 
