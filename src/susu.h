@@ -34,6 +34,8 @@ enum Status {
     WRONG_WEEK,
     INVALID_AMOUNT,
     OVERPAYMENT,
+    CYCLE_COMPLETE,
+    WEEK_NOT_PAID,
 };
 
 // The outcome of an action. When status is not OK nothing was changed.
@@ -53,6 +55,12 @@ struct Debt {
     Cents owed;
 };
 
+struct Payout {
+    int cycle;
+    int week;
+    std::string memberId;
+    Cents amount;
+};
 
 class Group {
 public:
@@ -64,6 +72,7 @@ public:
     // --- actions ---
     Result addMember(const std::string& id);
     Result recordContribution(const std::string& id, int week, Cents amount);
+    Result closeWeek();
 
     // --- read-only views ---
     Cents weeklyContribution() const { return contribution_; }
@@ -73,6 +82,9 @@ public:
     int cycle() const { return cycle_; }
     Cents owedBy(const std::string& id) const;  // -1 if there is no such member
     std::vector<Debt> debts() const;            // everyone who still owes this week
+    const std::vector<Payout>& payouts() const { return payouts_; }
+    bool isComplete() const { return complete_; }
+    std::string nextRecipient() const;          // "" when nobody is due a payout
 
 private:
     int indexOf(const std::string& id) const;  // -1 if unknown
@@ -84,6 +96,8 @@ private:
     std::vector<Member> members_;
     int week_;
     int cycle_;
+    std::vector<Payout> payouts_;
+    bool complete_;
 };
 
 }  // namespace susu

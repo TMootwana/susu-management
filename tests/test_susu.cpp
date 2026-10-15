@@ -206,6 +206,71 @@ TEST(payments_need_enough_members) {
     CHECK_EQ(g.recordContribution("ONLY", 1, 5000).status, NOT_ENOUGH_MEMBERS);
 }
 
+// ------------------------------------------------------------ closing-week tests
+
+// Every member pays the full contribution for the current week.
+void payInFull(Group& g) {
+    for (std::size_t i = 0; i < g.members().size(); ++i)
+        g.recordContribution(g.members()[i].id, g.week(), R100);
+}
+
+TEST(week_cannot_close_while_someone_owes) {
+    Group g = makeGroup(3);
+    g.recordContribution("M1", 1, R100);   // paid in full
+    g.recordContribution("M2", 1, 5000);   // paid half
+                                           // M3 paid nothing
+    Result r = g.closeWeek();
+    CHECK_EQ(r.status, WEEK_NOT_PAID);
+    CHECK(r.message.find("M2 owes R50.00") != std::string::npos);
+    CHECK(r.message.find("M3 owes R100.00") != std::string::npos);
+    CHECK(r.message.find("M1 owes") == std::string::npos);  // M1 is not reported
+    CHECK_EQ(g.week(), 1);                  // did not move on
+    CHECK(g.payouts().empty());             // nobody was paid
+    CHECK_EQ(g.owedBy("M2"), 5000);         // balances untouched
+    CHECK_EQ(g.owedBy("M1"), 0);
+}
+
+TEST(full_week_pays_the_whole_pot_to_the_first_member) {
+    Group g = makeGroup(3);
+    payInFull(g);
+    CHECK_EQ(g.nextRecipient(), "M1");
+    CHECK_EQ(g.closeWeek().status, OK);
+    CHECK_EQ(g.payouts().size(), 1u);
+    CHECK_EQ(g.payouts()[0].memberId, "M1");
+    CHECK_EQ(g.payouts()[0].amount, 30000);  // 3 members x R100.00
+    CHECK_EQ(g.week(), 2);
+    CHECK_EQ(g.owedBy("M1"), R100);          // balances reset for the new week
+    CHECK_EQ(g.nextRecipient(), "M2");
+}
+
+TEST(members_are_paid_in_join_order_and_the_cycle_completes) {
+    Group g = makeGroup(3);
+    for (int week = 1; week <= 3; ++week) {
+        payInFull(g);
+        CHECK_EQ(g.closeWeek().status, OK);
+    }
+    CHECK_EQ(g.payouts().size(), 3u);
+    CHECK_EQ(g.payouts()[0].memberId, "M1");
+    CHECK_EQ(g.payouts()[1].memberId, "M2");
+    CHECK_EQ(g.payouts()[2].memberId, "M3");
+    CHECK(g.isComplete());
+    CHECK_EQ(g.nextRecipient(), "");
+    CHECK_EQ(g.closeWeek().status, CYCLE_COMPLETE);                    // nothing more to pay
+    CHECK_EQ(g.recordContribution("M1", 3, 100).status, CYCLE_COMPLETE);
+}
+
+TEST(partial_payments_that_add_up_exactly_allow_the_week_to_close) {
+    Group g = makeGroup(3);
+    // M1 pays R33.33 + R33.33 + R33.34 = exactly R100.00
+    CHECK_EQ(g.recordContribution("M1", 1, 3333).status, OK);
+    CHECK_EQ(g.recordContribution("M1", 1, 3333).status, OK);
+    CHECK_EQ(g.closeWeek().status, WEEK_NOT_PAID);
+    CHECK_EQ(g.recordContribution("M1", 1, 3334).status, OK);
+    CHECK_EQ(g.owedBy("M1"), 0);
+    g.recordContribution("M2", 1, R100);
+    g.recordContribution("M3", 1, R100);
+    CHECK_EQ(g.closeWeek().status, OK);
+}
 
 
 // ------------------------------------------------------------------ runner

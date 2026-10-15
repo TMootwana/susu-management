@@ -85,6 +85,7 @@ Group::Group(Cents weeklyContribution, const std::string& currency,
         throw std::invalid_argument("The weekly contribution must be greater than zero.");
     week_ = 1;
     cycle_ = 1;
+    complete_ = false;
 }
 
 int Group::indexOf(const std::string& id) const {
@@ -133,6 +134,8 @@ std::vector<Debt> Group::debts() const {
 }
 
 Result Group::recordContribution(const std::string& id, int week, Cents amount) {
+    if (complete_)
+        return make(CYCLE_COMPLETE, "This cycle is complete. Start the next cycle first.");
     if (members_.size() < minToStart_)
         return make(NOT_ENOUGH_MEMBERS, "The group needs at least " +
                     std::to_string(minToStart_) + " members before payments start.");
@@ -158,6 +161,50 @@ Result Group::recordContribution(const std::string& id, int week, Cents amount) 
                 ". Still owes " + formatMoney(contribution_ - m.paid, currency_) + ".");
 }
 
+std::string Group::nextRecipient() const {
+    if (complete_ || members_.empty() || members_.size() < minToStart_) return "";
+    return members_[week_ - 1].id;
+}
+
+Result Group::closeWeek() {
+    if (complete_)
+        return make(CYCLE_COMPLETE, "This cycle is already complete.");
+    if (members_.size() < minToStart_)
+        return make(NOT_ENOUGH_MEMBERS, "The group needs at least " +
+                    std::to_string(minToStart_) + " members before a week can close.");
+
+    // Everyone must have paid in full. If not: no payout, report who owes what.
+    std::vector<Debt> owing = debts();
+    if (!owing.empty()) {
+        std::string text = "Week " + std::to_string(week_) + " cannot close. Still owing:";
+        for (std::size_t i = 0; i < owing.size(); ++i)
+            text += "\n  " + owing[i].memberId + " owes " + formatMoney(owing[i].owed, currency_);
+        return make(WEEK_NOT_PAID, text);
+    }
+
+    // Members are paid in the order they joined, one per week.
+    const std::string recipient = members_[week_ - 1].id;
+    Cents pot = contribution_ * static_cast<Cents>(members_.size());
+
+    Payout p;
+    p.cycle = cycle_;
+    p.week = week_;
+    p.memberId = recipient;
+    p.amount = pot;
+    payouts_.push_back(p);
+
+    for (std::size_t i = 0; i < members_.size(); ++i) members_[i].paid = 0;
+
+    std::string text = "Week " + std::to_string(week_) + " closed. " + recipient +
+                       " receives " + formatMoney(pot, currency_) + ".";
+    if (week_ == static_cast<int>(members_.size())) {
+        complete_ = true;
+        text += "\nEveryone has been paid: the cycle is complete.";
+    } else {
+        ++week_;
+    }
+    return make(OK, text);
+}
 
 
 
