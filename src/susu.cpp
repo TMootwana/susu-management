@@ -86,6 +86,7 @@ Group::Group(Cents weeklyContribution, const std::string& currency,
     week_ = 1;
     cycle_ = 1;
     complete_ = false;
+    locked_ = false;
 }
 
 int Group::indexOf(const std::string& id) const {
@@ -101,6 +102,13 @@ Result Group::addMember(const std::string& rawId) {
         return make(INVALID_ID, "A member ID or name cannot be empty.");
     if (id.find('|') != std::string::npos || id.find(',') != std::string::npos)
         return make(INVALID_ID, "A member ID or name cannot contain '|' or ','.");
+    // RULE: nobody joins while a cycle is running. The group locks when the first
+    // payment is recorded and opens again only after every member has been paid
+    // and the next cycle has been started.
+    if (locked_)
+        return make(GROUP_LOCKED, complete_
+                    ? "The cycle is finished. Start the next cycle before adding members."
+                    : "A cycle is in progress: no new members until the whole group has been paid.");
     if (members_.size() >= maxMembers_)
         return make(GROUP_FULL, "The group is full.");
     if (indexOf(id) >= 0)
@@ -157,6 +165,7 @@ Result Group::recordContribution(const std::string& id, int week, Cents amount) 
                     formatMoney(owed, currency_) + ").");
 
     m.paid += amount;
+    locked_ = true;
     return make(OK, "Recorded " + formatMoney(amount, currency_) + " for " + m.id +
                 ". Still owes " + formatMoney(contribution_ - m.paid, currency_) + ".");
 }
@@ -194,6 +203,7 @@ Result Group::closeWeek() {
     payouts_.push_back(p);
 
     for (std::size_t i = 0; i < members_.size(); ++i) members_[i].paid = 0;
+    locked_ = true;
 
     std::string text = "Week " + std::to_string(week_) + " closed. " + recipient +
                        " receives " + formatMoney(pot, currency_) + ".";
@@ -206,6 +216,16 @@ Result Group::closeWeek() {
     return make(OK, text);
 }
 
+Result Group::startNextCycle() {
+    if (!complete_)
+        return make(CYCLE_NOT_COMPLETE, "The current cycle is not finished: not every member has been paid yet.");
+    ++cycle_;
+    week_ = 1;
+    complete_ = false;
+    locked_ = false;
+    for (std::size_t i = 0; i < members_.size(); ++i) members_[i].paid = 0;
+    return make(OK, "Cycle " + std::to_string(cycle_) + " started. Members may now be added.");
+}
 
 
 }  // namespace susu

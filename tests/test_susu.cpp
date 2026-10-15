@@ -272,6 +272,62 @@ TEST(partial_payments_that_add_up_exactly_allow_the_week_to_close) {
     CHECK_EQ(g.closeWeek().status, OK);
 }
 
+// ------------------------------------------------------------ joining rule tests
+
+TEST(members_can_join_before_any_payment_is_made) {
+    Group g = makeGroup(3);
+    CHECK(!g.isLocked());
+    CHECK_EQ(g.addMember("M4").status, OK);
+    CHECK_EQ(g.members().size(), 4u);
+}
+
+TEST(nobody_can_join_until_the_whole_group_is_paid) {
+    Group g = makeGroup(3);
+    g.recordContribution("M1", 1, 100);
+    CHECK_EQ(g.addMember("LATE").status, GROUP_LOCKED);  // first payment locks the group
+
+    g.recordContribution("M1", 1, 9900);
+    g.recordContribution("M2", 1, R100);
+    g.recordContribution("M3", 1, R100);
+    CHECK_EQ(g.closeWeek().status, OK);                  // week 1 paid out
+    CHECK_EQ(g.addMember("LATE").status, GROUP_LOCKED);  // still mid-cycle
+
+    payInFull(g);
+    g.closeWeek();
+    payInFull(g);
+    g.closeWeek();                                       // week 3: everyone has been paid
+    CHECK(g.isComplete());
+    CHECK_EQ(g.addMember("LATE").status, GROUP_LOCKED);  // must start the next cycle first
+    CHECK_EQ(g.members().size(), 3u);
+}
+
+TEST(a_new_member_can_join_in_the_next_cycle_and_is_paid_last) {
+    Group g = makeGroup(3);
+    for (int week = 1; week <= 3; ++week) {
+        payInFull(g);
+        g.closeWeek();
+    }
+    CHECK_EQ(g.startNextCycle().status, OK);
+    CHECK_EQ(g.cycle(), 2);
+    CHECK_EQ(g.week(), 1);
+    CHECK_EQ(g.addMember("LATE").status, OK);
+    CHECK_EQ(g.members().back().id, "LATE");
+
+    payInFull(g);
+    CHECK_EQ(g.closeWeek().status, OK);
+    CHECK_EQ(g.payouts().back().cycle, 2);
+    CHECK_EQ(g.payouts().back().memberId, "M1");
+    CHECK_EQ(g.payouts().back().amount, 40000);          // pot now has 4 contributions
+}
+
+TEST(the_next_cycle_cannot_start_early) {
+    Group g = makeGroup(3);
+    CHECK_EQ(g.startNextCycle().status, CYCLE_NOT_COMPLETE);
+    payInFull(g);
+    g.closeWeek();
+    CHECK_EQ(g.startNextCycle().status, CYCLE_NOT_COMPLETE);
+    CHECK_EQ(g.cycle(), 1);
+}
 
 // ------------------------------------------------------------------ runner
 

@@ -36,6 +36,8 @@ enum Status {
     OVERPAYMENT,
     CYCLE_COMPLETE,
     WEEK_NOT_PAID,
+    GROUP_LOCKED,
+    CYCLE_NOT_COMPLETE
 };
 
 // The outcome of an action. When status is not OK nothing was changed.
@@ -73,6 +75,7 @@ public:
     Result addMember(const std::string& id);
     Result recordContribution(const std::string& id, int week, Cents amount);
     Result closeWeek();
+    Result startNextCycle();
 
     // --- read-only views ---
     Cents weeklyContribution() const { return contribution_; }
@@ -85,6 +88,7 @@ public:
     const std::vector<Payout>& payouts() const { return payouts_; }
     bool isComplete() const { return complete_; }
     std::string nextRecipient() const;          // "" when nobody is due a payout
+    bool isLocked() const { return locked_; }
 
 private:
     int indexOf(const std::string& id) const;  // -1 if unknown
@@ -98,6 +102,7 @@ private:
     int cycle_;
     std::vector<Payout> payouts_;
     bool complete_;
+    bool locked_;
 };
 
 }  // namespace susu
