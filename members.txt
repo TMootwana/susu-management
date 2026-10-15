@@ -1,0 +1,6 @@
+# One member per line. The first member listed is paid first.
+# Blank lines and lines starting with # are ignored.
+# "M001|Ama" or "M001,Ama" also work: only the part before | or , is the ID.
+M001
+M002
+M003

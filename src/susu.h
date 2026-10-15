@@ -89,6 +89,7 @@ public:
     bool isComplete() const { return complete_; }
     std::string nextRecipient() const;          // "" when nobody is due a payout
     bool isLocked() const { return locked_; }
+    std::string nextFreeCode() const;           // M001, M002, ... first unused
 
 private:
     int indexOf(const std::string& id) const;  // -1 if unknown

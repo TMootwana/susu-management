@@ -227,5 +227,12 @@ Result Group::startNextCycle() {
     return make(OK, "Cycle " + std::to_string(cycle_) + " started. Members may now be added.");
 }
 
+std::string Group::nextFreeCode() const {
+    for (int n = 1;; ++n) {
+        std::ostringstream out;
+        out << "M" << (n < 10 ? "00" : (n < 100 ? "0" : "")) << n;
+        if (indexOf(out.str()) < 0) return out.str();
+    }
+}
 
 }  // namespace susu
