@@ -1,0 +1,10 @@
+# build output
+susu
+run_tests
+*.exe
+*.o
+# Code::Blocks
+*.layout
+*.depend
+bin/
+obj/
