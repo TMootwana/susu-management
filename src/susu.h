@@ -23,6 +23,51 @@ bool parseMoney(const std::string& text, Cents& cents, std::string& error);
 // 10050 -> "R100.50". A currency longer than one character gets a space ("GHS 100.50").
 std::string formatMoney(Cents cents, const std::string& currency = "R");
 
+// Why an action was refused. OK means it worked.
+enum Status {
+    OK,
+    INVALID_ID,
+    DUPLICATE_MEMBER,
+    GROUP_FULL,
+};
+
+// The outcome of an action. When status is not OK nothing was changed.
+struct Result {
+    Status status;
+    std::string message;
+    bool ok() const { return status == OK; }
+};
+
+struct Member {
+    std::string id;
+};
+
+
+
+class Group {
+public:
+    // Every member pays 'weeklyContribution' cents each week.
+    // Throws std::invalid_argument if the contribution is not positive.
+    explicit Group(Cents weeklyContribution, const std::string& currency = "R",
+                   std::size_t maxMembers = 10, std::size_t minToStart = 2);
+
+    // --- actions ---
+    Result addMember(const std::string& id);
+
+    // --- read-only views ---
+    Cents weeklyContribution() const { return contribution_; }
+    const std::string& currency() const { return currency_; }
+    const std::vector<Member>& members() const { return members_; }
+
+private:
+    int indexOf(const std::string& id) const;  // -1 if unknown
+
+    Cents contribution_;
+    std::string currency_;
+    std::size_t maxMembers_;
+    std::size_t minToStart_;
+    std::vector<Member> members_;
+};
 
 }  // namespace susu
 

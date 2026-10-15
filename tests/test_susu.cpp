@@ -108,6 +108,53 @@ TEST(money_has_no_rounding_errors) {
     CHECK_EQ(x + y + z, 10000);
 }
 
+// ------------------------------------------------------------ group helpers
+
+const Cents R100 = 10000;
+
+// A group of R100 contributors called M1, M2, ... Mn.
+Group makeGroup(int members) {
+    Group g(R100);
+    for (int i = 1; i <= members; ++i) g.addMember("M" + std::to_string(i));
+    return g;
+}
+
+// ------------------------------------------------------------ member tests
+
+TEST(group_rejects_a_zero_or_negative_contribution) {
+    bool threw = false;
+    try { Group g(0); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(threw);
+    threw = false;
+    try { Group g(-500); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(threw);
+}
+
+TEST(member_ids_must_be_unique_ignoring_case_and_spaces) {
+    Group g(R100);
+    CHECK_EQ(g.addMember("Ama").status, OK);
+    CHECK_EQ(g.addMember("ama").status, DUPLICATE_MEMBER);
+    CHECK_EQ(g.addMember("  AMA  ").status, DUPLICATE_MEMBER);
+    CHECK_EQ(g.addMember("Kofi").status, OK);
+    CHECK_EQ(g.members().size(), 2u);
+}
+
+TEST(empty_or_invalid_ids_are_rejected) {
+    Group g(R100);
+    CHECK_EQ(g.addMember("").status, INVALID_ID);
+    CHECK_EQ(g.addMember("   ").status, INVALID_ID);
+    CHECK_EQ(g.addMember("A|B").status, INVALID_ID);
+    CHECK_EQ(g.members().size(), 0u);
+}
+
+TEST(group_is_limited_to_its_maximum_size) {
+    Group g(R100, "R", 3);
+    CHECK_EQ(g.addMember("A").status, OK);
+    CHECK_EQ(g.addMember("B").status, OK);
+    CHECK_EQ(g.addMember("C").status, OK);
+    CHECK_EQ(g.addMember("D").status, GROUP_FULL);
+    CHECK_EQ(g.members().size(), 3u);
+}
 
 
 

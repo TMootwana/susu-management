@@ -64,6 +64,50 @@ std::string formatMoney(Cents cents, const std::string& currency) {
     return out.str();
 }
 
+// ------------------------------------------------------------------ group
+
+namespace {
+Result make(Status status, const std::string& message) {
+    Result r;
+    r.status = status;
+    r.message = message;
+    return r;
+}
+}  // namespace
+
+Group::Group(Cents weeklyContribution, const std::string& currency,
+             std::size_t maxMembers, std::size_t minToStart)
+    : contribution_(weeklyContribution),
+      currency_(currency),
+      maxMembers_(maxMembers),
+      minToStart_(minToStart) {
+    if (weeklyContribution <= 0)
+        throw std::invalid_argument("The weekly contribution must be greater than zero.");
+}
+
+int Group::indexOf(const std::string& id) const {
+    std::string wanted = normalise(id);
+    for (std::size_t i = 0; i < members_.size(); ++i)
+        if (normalise(members_[i].id) == wanted) return static_cast<int>(i);
+    return -1;
+}
+
+Result Group::addMember(const std::string& rawId) {
+    std::string id = trim(rawId);
+    if (id.empty())
+        return make(INVALID_ID, "A member ID or name cannot be empty.");
+    if (id.find('|') != std::string::npos || id.find(',') != std::string::npos)
+        return make(INVALID_ID, "A member ID or name cannot contain '|' or ','.");
+    if (members_.size() >= maxMembers_)
+        return make(GROUP_FULL, "The group is full.");
+    if (indexOf(id) >= 0)
+        return make(DUPLICATE_MEMBER, "'" + id + "' is already a member.");
+
+    Member m;
+    m.id = id;
+    members_.push_back(m);
+    return make(OK, "Added " + id + ".");
+}
 
 
 
